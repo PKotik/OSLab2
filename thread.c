@@ -255,7 +255,6 @@ void Add_in_list(struct thread *t)
       }
     }
   }
-
 }
 
 void
@@ -340,8 +339,18 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+  if (cur != idle_thread)
+  {
+    if (list_empty (&ready_list)) Add_in_list(cur);
+    else
+    {
+      struct list_elem *first_elem = list_front(&ready_list);
+      struct thread *max_thread = list_entry(first_elem, struct thread, elem); 
+      if (cur->priority>=max_thread->priority) return;
+      else Add_in_list(cur); //list_push_back (&ready_list, &cur->elem);
+    }
+
+  }
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
