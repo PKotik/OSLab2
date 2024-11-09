@@ -139,6 +139,41 @@ thread_tick (void)
     intr_yield_on_return ();
 }
 
+
+struct FIFO_forRR
+{
+  struct thread *t;
+  struct FIFO_forRR *next;
+};
+
+struct FIFO_forRR *RR=NULL;
+
+void AddRR(struct thread *t)
+{
+  struct FIFO_forRR *tmp;
+  tmp->t=t;
+  tmp->next=NULL;
+  if (RR==NULL)
+  { 
+    tmp->next=tmp;
+    RR=tmp;
+  }
+  else
+  {
+
+    tmp->next=RR->next;
+    RR->next=tmp;
+  }
+}
+
+struct thread *GetRR()
+{
+  struct thread* t;
+  t=RR->t;
+  RR=RR->next;
+  return t;
+}
+
 /* Prints thread statistics. */
 void
 thread_print_stats (void) 
@@ -530,7 +565,10 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    return 
+    {
+      list_entry (list_pop_front (&ready_list), struct thread, elem);
+    } 
 }
 
 /* Completes a thread switch by activating the new thread's page
