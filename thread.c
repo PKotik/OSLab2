@@ -20,6 +20,9 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
+
+
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -100,6 +103,12 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
 }
 
+void thread_donate_priority(struct thread *t) {
+    if (t->priority > t->original_priority) {
+        t->original_priority = t->priority;
+    }
+}
+
 /* Starts preemptive thread scheduling by enabling interrupts.
    Also creates the idle thread. */
 void
@@ -122,25 +131,34 @@ thread_start (void)
 void
 thread_tick (void) 
 {
-  struct thread *t = thread_current ();
+
+  struct thread *current = thread_current();
+  if (current != idle_thread) 
+  {
+    current->time_slice--;
+    if (current->time_slice <= 0) 
+    {
+      intr_yield_on_return();
+    }
+  }
 
   /* Update statistics. */
-  if (t == idle_thread)
+  if (current == idle_thread)
     idle_ticks++;
 #ifdef USERPROG
-  else if (t->pagedir != NULL)
+  else if (current->pagedir != NULL)
     user_ticks++;
 #endif
   else
     kernel_ticks++;
 
   /* Enforce preemption. */
-  if (++thread_ticks >= TIME_SLICE)
-    intr_yield_on_return ();
+  /*if (++thread_ticks >= TIME_SLICE)
+    intr_yield_on_return ();*/
 }
 
 
-struct FIFO_forRR
+/*struct FIFO_forRR
 {
   struct thread *t;
   struct FIFO_forRR *next;
@@ -172,7 +190,8 @@ struct thread *GetRR()
   t=RR->t;
   RR=RR->next;
   return t;
-}
+}*/
+
 
 /* Prints thread statistics. */
 void
@@ -217,6 +236,7 @@ thread_create (const char *name, int priority,
 
   /* Initialize thread. */
   init_thread (t, name, priority);
+  t->original_priority = priority;
   tid = t->tid = allocate_tid ();
 
   /* Prepare thread for first run by initializing its stack.
@@ -275,6 +295,7 @@ thread_block (void)
 
 void Add_in_list(struct thread *t)
 {
+  t->time_slice = TIME_SLICE;
   if (list_empty (&ready_list) || list_entry(list_end(&ready_list)->prev, struct thread, elem)->priority>=t->priority) 
     list_push_back(&ready_list, &t->elem);
   else
@@ -303,6 +324,7 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   
   Add_in_list(t);
+
 	
   //list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
@@ -413,6 +435,10 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+}
+
+void thread_revert_priority(struct thread* t) {
+    t->priority = t->original_priority;
 }
 
 /* Returns the current thread's priority. */
@@ -554,22 +580,49 @@ alloc_frame (struct thread *t, size_t size)
   return t->stack;
 }
 
+bool thread_time_slice_expired(struct thread *t) 
+{
+    return t->time_slice == 0;
+}
+
+
 /* Chooses and returns the next thread to be scheduled.  Should
    return a thread from the run queue, unless the run queue is
    empty.  (If the running thread can continue running, then it
    will be in the run queue.)  If the run queue is empty, return
    idle_thread. */
-static struct thread *
-next_thread_to_run (void) 
+
+struct thread *
+next_thread_to_run(void) 
 {
-  if (list_empty (&ready_list))
-    return idle_thread;
-  else
-    return 
+    if (list_empty(&ready_list))
+        return idle_thread;
+
+    struct list_elem *first_elem = list_begin(&ready_list);
+    struct thread *next = list_entry(first_elem, struct thread, elem);
+
+    if (thread_time_slice_expired(next)) 
     {
-      list_entry (list_pop_front (&ready_list), struct thread, elem);
-    } 
+        struct list_elem *current_elem = first_elem;
+
+        struct list_elem *next_elem = list_next(current_elem);
+        while (next_elem != list_end(&ready_list)) {
+            struct thread *current_thread = list_entry(next_elem, struct thread, elem);
+            if (current_thread->priority < next->priority)
+                break;
+            current_elem = next_elem;
+            next_elem = list_next(next_elem);
+        }
+
+        list_remove(first_elem);
+        list_insert(current_elem, first_elem);
+        next = list_entry(list_begin(&ready_list), struct thread, elem);
+    }
+
+    list_remove(&next->elem);
+    return next;
 }
+
 
 /* Completes a thread switch by activating the new thread's page
    tables, and, if the previous thread is dying, destroying it.
@@ -639,6 +692,12 @@ schedule (void)
     prev = switch_threads (cur, next);
   thread_schedule_tail (prev);
 }
+
+static void
+scheduleRR (void)
+{
+  
+} 
 
 /* Returns a tid to use for a new thread. */
 static tid_t

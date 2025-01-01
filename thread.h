@@ -5,6 +5,12 @@
 #include <list.h>
 #include <stdint.h>
 
+enum next_thread
+{
+   SAME,
+   NOT_SAME
+};
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -82,20 +88,20 @@ typedef int tid_t;
    blocked state is on a semaphore wait list. */
 struct thread
   {
+    struct lock *waiting_lock;
+    int64_t time_slice;
     /* Owned by thread.c. */
     tid_t tid;                          /* Thread identifier. */
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int original_priority;
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    
-
-    //int64_t sleep_ticks;
-
+    enum next_thread next_thread;
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -135,6 +141,7 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+void thread_revert_priority(struct thread* t);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
